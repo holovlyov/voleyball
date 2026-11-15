@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="uk"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ВолейТренер — тренерська дошка для волейболу</title>
+<meta name="description" content="Розстановки 5-1 та 4-2, ротації, атака й захист, 2D/3D та вид від 1-ї і 3-ї особи. Безкоштовна тренерська дошка для волейболу.">
+<meta property="og:title" content="ВолейТренер">
+<meta property="og:description" content="Тренерська дошка для волейболу: розстановки, ротації, атака, захист, 3D.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🏐%3C/text%3E%3C/svg%3E">
+<style>
+:root{--bg:#eef2f7;--card:#fff;--ink:#0d1a28;--mut:#5d7087;--br:#cfd8e3;--on:#0d1a28;--onk:#fff;--st:#dce5ef;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1520;--card:#111e2c;--ink:#eef3f8;--mut:#8fa3b8;--br:#243449;--on:#eef3f8;--onk:#0b1520;--st:#16283a}}
+:root[data-theme="dark"]{--bg:#0b1520;--card:#111e2c;--ink:#eef3f8;--mut:#8fa3b8;--br:#243449;--on:#eef3f8;--onk:#0b1520;--st:#16283a}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--st)}
+main{max-width:1100px;margin:0 auto;padding:0 10px 40px}
+#stage{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;height:48vh;min-height:270px;background:var(--st);overflow:hidden;touch-action:none;border-radius:0 0 14px 14px}
+canvas{width:100%;height:100%;display:block}
+#hud{position:absolute;left:10px;right:10px;top:6px;font-size:12px;font-weight:600;pointer-events:none;line-height:1.35}
+#bar{position:absolute;left:6px;right:6px;bottom:6px;display:flex;flex-wrap:wrap;gap:5px}
+.s{background:rgba(13,26,40,.8);color:#fff;border:0;border-radius:8px;padding:7px 10px;font:600 13px system-ui}
+.s.on{background:#f08a4b}
+h1{margin:12px 0 0;font-size:24px}
+h3{margin:14px 0 8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut)}
+.b,select{border:1px solid var(--br);background:var(--card);color:var(--ink);padding:9px 13px;border-radius:10px;font:inherit;margin:0 6px 6px 0}
+.b.on{background:var(--on);color:var(--onk);border-color:var(--on)}
+.b small{opacity:.7}
+@media(min-width:880px){main{display:grid;grid-template-columns:1fr 390px;gap:16px;align-items:start;padding-top:10px}#stage{height:calc(100vh - 20px);border-radius:14px}}
+</style></head><body><main>
+<div id="stage"><canvas id="c"></canvas><div id="hud"><div id="h1"></div><div id="h2"></div></div><div id="bar"></div></div>
+<div id="side"><h1>🏐 ВолейТренер</h1><div id="ctl"></div></div>
+</main>
+<noscript><p style="padding:16px">Для роботи потрібен JavaScript.</p></noscript>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+function main(){
+const $=s=>document.querySelector(s),rnd=n=>Math.floor(Math.random()*n),cl=(x,m)=>Math.max(-m,Math.min(m,x)),cp=o=>JSON.parse(JSON.stringify(o));
+const SEQ=['start','serve','game','att','set','atk','cov','def'];
+const PH={start:'Стартова',serve:'Подача',game:'Ігрова',att:'Розхід на атаку',set:'Пас',atk:'Удар',cov:'Страхування',def:'Захист'};
+const SZ=[1,6,5,4,3,2];
+const ORD={s5:['Зв','Дг1','ЦБ2','Діаг','Дг2','ЦБ1'],s4:['Зв1','Дг1','ЦБ2','Зв2','Дг2','ЦБ1']};
+const T={start:[[7.5,7],[7.5,1.8],[4.5,1.8],[1.5,1.8],[1.5,7],[4.5,7]],
+serve:[[7.5,10.4],[7.5,1.3],[4.5,1.3],[1.5,1.3],[1.5,7],[4.5,7.5]],
+cover:[[7.5,6.5],[7.5,1.2],[4.5,1.2],[1.5,1.2],[1.5,6.5],[4.5,7.5]],
+rec:[[7.2,5.2],[7.6,1.2],[4.5,1.2],[1.4,2.4],[1.8,5.2],[4.5,6.5]],
+att:[[7,5.5],[8.3,2],[4.5,2.4],[1,1.8],[2.5,5.5],[4.5,6.5]]};
+// тип атаки: [назва, пріоритет зон виконавця, x, z точки удару, висота пасу]
+const AK={out:['Лівий край (4)',[4,3,2],-3.5,.6,3.3],opp:['Правий край (2)',[2,3,4],3.8,.6,3.3],mid:['Швидка центр (3)',[3,4,2],.6,.5,2.9],slide:['Слайд',[3,2,4],2.2,.5,3],pipe:['Пайп (6)',[6,5,1],0,3.8,3.1],back:['Задня лінія (1)',[1,6,5],3.2,3.8,3.1]};
+const DX={l:-3.3,c:0,r:3.3,p:0,b:-3},DZ={l:[2,3,4],c:[3,4,2],r:[4,3,2],p:[6,5,1],b:[1,6,5]};
+const S={sys:'s5',fmt:'half',view:'3d',rot:0,rec:0,ph:'start',ak:'out',dr:'l',bl:2,ds:'per',lib:1,zn:1,dg:0,lab:1,tj:1,tl:60,sel:0,play:0,spd:1,ed:1,mode:'auto',si:0};
+const col=n=>/^(Зв|Діаг)/.test(n)?'#f2c230':/^Дг/.test(n)?'#d9453d':/^ЦБ/.test(n)?'#2f6fd6':'#f4f4f4';
+const eff=()=>S.fmt==='tr'?'2d':S.view;
+let F,NM=[],SC=[],Q=null,ok=0,nn=0,th=0,ph_=1,rad=20,acc=0,dg=null,CAM;
+const zx=z=>[3,3,0,-3,-3,0][z-1];
+function dfn(zs,dX,n,sy){
+ const out=[],fx=[];
+ zs.forEach((z,i)=>{if(z>1&&z<5)fx.push(i)});
+ fx.sort((a,b)=>Math.abs(zx(zs[a])-dX)-Math.abs(zx(zs[b])-dX));
+ fx.slice(0,n).sort((a,b)=>zx(zs[a])-zx(zs[b])).forEach((i,k)=>out[i]={x:cl(dX+(k-(n-1)/2)*.95,4.2),z:.55,j:.45,a:1});
+ fx.slice(n).forEach(i=>out[i]={x:zx(zs[i])*.9,z:3,j:0,a:0});
+ zs.forEach((z,i)=>{if(out[i])return;const c=z===5?-1:z===1?1:0,s=c*dX;let x=c*3.4+dX*.12,d=c?5.4:7.4;
+  if(sy==='rot'){x=c*3.2+dX*.3;d=s>0?4.2:s<0?6.8:c?5.6:7.2}
+  if(sy==='man'){if(c){x=c*3.7;d=6.4}else{x=dX;d=3.4}}
+  out[i]={x:cl(x,4.2),z:d,j:0,a:0}});
+ return out}
+function build(){
+ const o=ORD[S.sys],ph=S.ph,rc=S.rec,r=S.rot,zs=o.map((n,i)=>((i-r)%6+6)%6+1),st=i=>i===0||(S.sys==='s4'&&i===3);
+ NM=o.map((n,i)=>S.lib&&/^ЦБ/.test(n)&&(zs[i]===1||zs[i]>4)?'Л':n);
+ const k1=ph==='start'?'start':ph==='serve'?(rc?'rec':'serve'):ph==='game'?(rc?'rec':'cover'):'att';
+ const k2=ph==='start'?'start':ph==='serve'?(rc?'serve':'rec'):ph==='game'?(rc?'cover':'rec'):'att';
+ const mk=(k,w)=>zs.map(z=>{const p=T[k][z-1];return{x:w*(p[0]-4.5),z:w*p[1],j:0,a:0}});
+ const pick=pf=>{for(const q of pf){const i=zs.indexOf(q);if(i>=0&&!st(i))return i}return zs.findIndex((z,i)=>!st(i))};
+ let O=mk(k1,1),P=mk(k2,-1);const A=AK[S.ak],ai=pick(A[1]),bk=A[3]>3,dX=DX[S.dr],dbk=S.dr==='p'||S.dr==='b';
+ if(/^(att|set|atk|cov)$/.test(ph)||(ph==='game'&&rc))O.forEach((p,i)=>{if(st(i)&&(S.sys==='s5'||(zs[i]>1&&zs[i]<5))){p.x=3.1;p.z=.8}});
+ if(/^(att|set|atk|cov)$/.test(ph)){const a=O[ai],ax=A[2];
+  if(ph==='att'){a.x=ax;a.z=bk?7:3.4}
+  if(ph==='set'){a.x=ax;a.z=bk?5.6:2.2}
+  if(ph==='atk'){a.x=ax;a.z=A[3];a.j=.65;a.a=1}
+  if(ph==='cov'){const C=[-2.4,-1.2,0,1.2,2.4].map((d,k)=>[cl(ax+d,4.2),[2.8,4.4,5.8,4.4,2.8][k]]);
+   O.map((p,i)=>i).filter(i=>i!==ai).sort((u,v)=>O[u].x-O[v].x).forEach((i,k)=>{O[i].x=C[k][0];O[i].z=C[k][1]});a.x=ax;a.z=A[3]+.7}
+  P=dfn(zs,-ax,S.bl,S.ds).map(q=>({x:-q.x,z:-q.z,j:q.j,a:q.a}))}
+ if(ph==='def'){O=dfn(zs,dX,S.bl,S.ds);P[pick(DZ[S.dr])]={x:dX,z:-(dbk?3.8:.6),j:.65,a:1}}
+ const B={start:rc?[-3,1.2,-10.4,0]:[3,1.2,10.4,0],serve:rc?[0,1,6.5,3.5]:[0,1,-6.5,3.5],game:rc?[3.1,2.6,.8,2]:[-3.1,2.6,-.8,2],att:[3.1,2.4,.8,2],set:[A[2],A[4],A[3],2.5],atk:[A[2],A[4],A[3],.4],cov:[A[2],2.9,-.8,1.5],def:[dX,3.2,-(dbk?3.8:.6),2.5]};
+ return{o:O,p:P,b:B[ph]}}
+
+const cv=$('#c'),R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+R.setPixelRatio(Math.min(devicePixelRatio,2));
+const sc=new THREE.Scene();
+sc.add(new THREE.AmbientLight(0xffffff,.8));
+const dlt=new THREE.DirectionalLight(0xffffff,.55);dlt.position.set(5,12,8);sc.add(dlt);
+const M=(c,o)=>new THREE.MeshLambertMaterial(Object.assign({color:c},o));
+const add=(g,m,x,y,z,rx)=>{const o=new THREE.Mesh(g,m);o.position.set(x,y,z);if(rx)o.rotation.x=rx;sc.add(o);return o};
+const tex=(w,h,f)=>{const c=document.createElement('canvas');c.width=w;c.height=h;f(c.getContext('2d'));return new THREE.CanvasTexture(c)};
+const FL=-Math.PI/2;
+add(new THREE.PlaneGeometry(30,42),M('#27405a'),0,-.02,0,FL);
+add(new THREE.PlaneGeometry(9,18),M('#b5632c'),0,0,0,FL);
+[[9.1,.1,0,9],[9.1,.1,0,-9],[.1,18.1,-4.5,0],[.1,18.1,4.5,0],[9,.08,0,0],[9,.05,0,3],[9,.05,0,-3]].forEach(a=>add(new THREE.PlaneGeometry(a[0],a[1]),M('#fff'),a[2],.01,a[3],FL));
+add(new THREE.PlaneGeometry(9.6,1),M('#111',{transparent:true,opacity:.55,side:2}),0,1.93,0);
+add(new THREE.BoxGeometry(9.6,.08,.04),M('#fff'),0,2.43,0);
+[-4.9,4.9].forEach(x=>add(new THREE.CylinderGeometry(.05,.05,2.43),M('#ccc'),x,1.2,0));
+const bm=(g,c,o)=>{const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:o,depthWrite:false,side:2}));sc.add(m);return m};
+const hl=bm(new THREE.PlaneGeometry(9,9),0x3b82f6,.2),ring=bm(new THREE.RingGeometry(.3,.45,24),0xffffff,.95),pole=bm(new THREE.CylinderGeometry(.02,.02,1),0xffffff,.8);
+hl.rotation.x=FL;ring.rotation.x=FL;
+const zg=new THREE.Group();sc.add(zg);
+[[3,7.5],[3,1.5],[0,1.5],[-3,1.5],[-3,7.5],[0,7.5]].forEach((p,i)=>{
+ const m=new THREE.Mesh(new THREE.PlaneGeometry(2,2),new THREE.MeshBasicMaterial({map:tex(64,64,g=>{g.fillStyle='rgba(255,255,255,.4)';g.font='bold 52px sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(i+1,32,34)}),transparent:true,depthWrite:false}));
+ m.rotation.x=FL;m.position.set(p[0],.02,p[1]);zg.add(m)});
+const LC={},lab=(t,c)=>LC[t+c]||(LC[t+c]=tex(128,64,g=>{g.fillStyle=c;g.beginPath();g.ellipse(64,32,60,28,0,0,7);g.fill();g.fillStyle=/f2c230|f4f4f4/.test(c)?'#111':'#fff';g.font='bold 32px sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(t,64,34)}));
+function mk(opp){
+ const g=new THREE.Group(),tm=M(opp?'#6b7a8c':'#888'),sk=M('#e0b48c');
+ const b=(geo,m,y)=>{const o=new THREE.Mesh(geo,m);o.position.y=y;g.add(o);return o};
+ b(new THREE.CylinderGeometry(.14,.12,.8),M('#1b2430'),.4);
+ b(new THREE.CylinderGeometry(.27,.22,.7),tm,1.15);
+ const hd=b(new THREE.SphereGeometry(.17,12,10),sk,1.72);
+ const arms=[-1,1].map(s=>{const a=new THREE.Group();a.position.set(s*.3,1.4,0);const m=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,.6),sk);m.position.y=-.3;a.add(m);g.add(a);return a});
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({depthTest:false}));sp.position.y=2.4;sp.scale.set(1.2,.6,1);g.add(sp);
+ if(opp){g.rotation.y=Math.PI;sp.visible=false}
+ sc.add(g);return{g,tm,hd,arms,sp,x:0,z:5,j:0,a:0}}
+const our=[0,1,2,3,4,5].map(()=>mk(0)),opp=[0,1,2,3,4,5].map(()=>mk(1));
+const ball=add(new THREE.SphereGeometry(.24,16,12),new THREE.MeshLambertMaterial({map:tex(128,64,g=>{g.fillStyle='#f2c230';g.fillRect(0,0,128,64);g.fillStyle='#2f6fd6';g.fillRect(0,20,128,24)})}),0,3,0);
+const tp=[],tg=new THREE.BufferGeometry(),tln=new THREE.Line(tg,new THREE.LineBasicMaterial({color:0xffffff}));tln.frustumCulled=false;sc.add(tln);
+const dga=new THREE.BufferAttribute(new Float32Array(18),3),dgg=new THREE.BufferGeometry();dgg.setAttribute('position',dga);
+const dgl=new THREE.LineSegments(dgg,new THREE.LineBasicMaterial({color:0xffffff}));dgl.frustumCulled=false;sc.add(dgl);
+
+let bf=[0,3,0],bto=[0,3,0],arc=0,bT=1;
+function setBall(){const t=F.b;bf=ball.position.toArray();bto=t.slice(0,3);arc=t[3]||0;bT=0}
+function reset(){S.mode='auto';F=build();setBall()}
+function load(){F=cp(SC[S.si]);setBall();ui()}
+function go(d){
+ if(S.mode==='my'&&SC.length){S.si=(S.si+d+SC.length)%SC.length;load();return}
+ let i=SEQ.indexOf(S.ph)+d;if(i>=8){i=0;S.rot=(S.rot+1)%6}if(i<0)i=7;
+ S.ph=SEQ[i];reset();ui()}
+function nq(){S.rot=rnd(6);S.rec=rnd(2);S.ph=SEQ[rnd(8)];S.ak=Object.keys(AK)[rnd(6)];S.dr='lcrpb'[rnd(5)];S.bl=1+rnd(3);S.mode='auto';F=build();
+ const c=[0,1,2,3,4,5].filter(i=>NM[i]!=='Л'),i=c[rnd(c.length)];Q={i,x:F.o[i].x,z:F.o[i].z,done:0,msg:''};ui()}
+const zn=(x,d)=>(d<3?[4,3,2]:[5,6,1])[x<-1.5?0:x>1.5?2:1];
+
+function ui(){
+ const B=(k,v,t,on)=>`<button class="b${on?' on':''}" data-k="${k}" data-v="${v}">${t}</button>`;
+ const Tg=(k,t)=>`<button class="b${S[k]?' on':''}" data-t="${k}">${t}</button>`;
+ const Sb=(a,t,on)=>`<button class="s${on?' on':''}" ${a}>${t}</button>`;
+ const G=(t,h)=>`<h3>${t}</h3><div>${h}</div>`,L=(k,a)=>a.map(x=>B(k,x[0],x[1],S[k]===x[0])).join('');
+ const tn=S.fmt==='tr',v=eff(),ph=S.ph,at=/^(att|set|atk|cov)$/.test(ph);let h='';
+ if(tn)h+=G('Тренажер',B('next',0,'Далі →'));
+ else{
+  h+=G('Етап',SEQ.map(p=>B('ph',p,PH[p],S.mode==='auto'&&ph===p)).join(''));
+  if(at)h+=G('Тип атаки',Object.keys(AK).map(k=>B('ak',k,AK[k][0],S.ak===k)).join(''));
+  if(ph==='def')h+=G('Атака суперника',L('dr',[['l','Ліво'],['c','Центр'],['r','Право'],['p','Пайп'],['b','Задня лінія']]));
+  if(at||ph==='def')h+=G(at?'Блок суперника':'Наш блок',L('bl',[[1,'Одиночний'],[2,'Подвійний'],[3,'Потрійний']]))+G(at?'Захист суперника':'Система захисту',L('ds',[['per','Периметр'],['rot','Ротація'],['man','Man-up']]));
+  h+=G('Ротація (де стоїть зв’язуючий)',[0,1,2,3,4,5].map(i=>B('rot',i,`<b>${i+1}</b><br><small>зона ${SZ[i]}</small>`,S.rot===i)).join(''));
+  h+=G('Хто починає розіграш',B('rec',0,'Ми подаємо',!S.rec)+B('rec',1,'Ми приймаємо',S.rec));
+  h+=G('Висота м’яча',[[.25,'На землі'],[1,'Низько'],[2.6,'Пас'],[3.2,'Удар']].map(a=>B('by',a[0],a[1],Math.abs(F.b[1]-a[0])<.15)).join(''));
+  h+=G('Мій сценарій (кроки)',SC.map((s,i)=>B('si',i,i+1,S.mode==='my'&&S.si===i)).join('')+B('add',0,'＋ Крок')+(S.mode==='my'?B('upd',0,'Оновити')+B('del',0,'🗑')+B('auto',0,'Авто'):''))}
+ h+=G('Система',L('sys',[['s5','5-1'],['s4','4-2']]))+G('Формат',L('fmt',[['half','Пів поля'],['full','Ціле поле'],['tr','Тренажер']]));
+ if(v==='p1'||v==='p3')h+=G('Гравець',ORD[S.sys].map((n,i)=>B('sel',i,n,S.sel===i)).join(''));
+ h+=G('Опції',Tg('lib','Ліберо')+Tg('zn','Номери зон')+Tg('dg','Діагоналі')+Tg('lab','Підписи')+(tn?'':Tg('tj','Слід м’яча')+`<select>${[[40,'Короткий слід'],[160,'Довгий слід'],[400,'Дуже довгий']].map(a=>`<option value="${a[0]}"${S.tl===a[0]?' selected':''}>${a[1]}</option>`).join('')}</select>`+B('clr',0,'Стерти слід')));
+ $('#ctl').innerHTML=h;
+ $('#bar').innerHTML=tn?'':[['2d','2D'],['3d','3D'],['p1','👁 1-а'],['p3','🎥 3-я']].map(a=>Sb(`data-k="view" data-v="${a[0]}"`,a[1],S.view===a[0])).join('')+Sb('data-t="ed"','✋ Правка',S.ed)+'<span style="flex:1"></span>'+Sb('data-k="step" data-v="-1"','◀')+Sb('data-k="play"',S.play?'⏸ Пауза':'▶ Грати',S.play)+Sb('data-k="step" data-v="1"','▶')+Sb('data-k="spd"',S.spd+'×');
+ const ctx=`Ротація ${S.rot+1} · ${S.rec?'Ми приймаємо':'Ми подаємо'} · ${S.mode==='my'?`Мій сценарій, крок ${S.si+1}/${SC.length}`:PH[ph]+(at?' · '+AK[S.ak][0]:ph==='def'?' · атака: '+{l:'ліво',c:'центр',r:'право',p:'пайп',b:'задня'}[S.dr]:'')}`;
+ $('#h1').textContent=tn&&Q?(Q.done?Q.msg:`Де стоїть «${NM[Q.i]}»? Торкніться майданчика. ${ctx}`):ctx}
+const H=e=>{const b=e.target.closest('button');if(!b)return;const k=b.dataset.k,v=b.dataset.v,t=b.dataset.t;
+ if(t){S[t]=S[t]?0:1;if(t==='lib')reset();ui();return}
+ if(k==='clr'){tp.length=0;return}
+ if(k==='next'){nq();return}
+ if(k==='play'){S.play=S.play?0:1;acc=0;ui();return}
+ if(k==='spd'){S.spd=S.spd===1?2:S.spd===2?.5:1;ui();return}
+ if(k==='step'){go(+v);return}
+ if(k==='add'){const n=S.mode==='my'?S.si+1:SC.length;SC.splice(n,0,cp(F));S.si=n;S.mode='my';ui();return}
+ if(k==='upd'){SC[S.si]=cp(F);return}
+ if(k==='del'){SC.splice(S.si,1);if(!SC.length){reset();ui()}else{S.si=Math.min(S.si,SC.length-1);load()}return}
+ if(k==='auto'){reset();ui();return}
+ if(k==='si'){S.si=+v;S.mode='my';load();return}
+ if(k==='by'){F.b[1]=+v;bf=bto=[ball.position.x,+v,ball.position.z];bT=1;ui();return}
+ S[k]=isNaN(v)?v:+v;
+ if(k==='fmt'){S.play=0;rad=v==='full'?34:20;Q=null;if(v==='tr'){nq();return}}
+ if(['sys','rot','rec','ph','ak','dr','bl','ds','fmt'].includes(k))reset();
+ ui()};
+$('#ctl').onclick=$('#bar').onclick=H;
+$('#ctl').onchange=e=>{if(e.target.tagName==='SELECT')S.tl=+e.target.value};
+
+const oc=new THREE.OrthographicCamera(-1,1,1,-1,.1,100);oc.up.set(0,0,-1);
+const pc=new THREE.PerspectiveCamera(45,1,.1,200),lk=new THREE.Vector3(0,1.5,-9);
+function camUpd(v,full){const W=cv.clientWidth||1,H2=cv.clientHeight||1,a=W/H2;
+ if(v==='2d'){const hN=full?26:15;let h=hN,w=h*a;if(w<14){w=14;h=w/a}const cz=full?0:4.2;
+  oc.left=-w/2;oc.right=w/2;oc.top=h/2;oc.bottom=-h/2;oc.updateProjectionMatrix();oc.position.set(0,40,cz);oc.lookAt(0,0,cz);return oc}
+ pc.aspect=a;
+ if(v==='3d'){pc.fov=45;const c=full?[0,.5,0]:[0,.5,4];pc.position.set(c[0]+rad*Math.sin(ph_)*Math.sin(th),c[1]+rad*Math.cos(ph_),c[2]+rad*Math.sin(ph_)*Math.cos(th));pc.updateProjectionMatrix();pc.lookAt(c[0],c[1],c[2]);return pc}
+ const p=our[S.sel];
+ if(v==='p1'){pc.fov=80;pc.position.set(p.x,1.75+p.j,p.z);const bp=ball.position,t2=bp.z<p.z-1?bp:new THREE.Vector3(p.x*.5,1.6,p.z-10);lk.lerp(t2,.12);pc.updateProjectionMatrix();pc.lookAt(lk);return pc}
+ pc.fov=60;pc.position.set(p.x,3.4,p.z+5);pc.updateProjectionMatrix();pc.lookAt(p.x*.6,1.2,p.z-8);return pc}
+const pt=new Map(),rc=new THREE.Raycaster(),pl=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+const fp=e=>{const r=cv.getBoundingClientRect();rc.setFromCamera(new THREE.Vector2((e.clientX-r.left)/r.width*2-1,1-(e.clientY-r.top)/r.height*2),CAM);const p=new THREE.Vector3();return rc.ray.intersectPlane(pl,p)?p:null};
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pt.set(e.pointerId,[e.clientX,e.clientY]);
+ const v=eff();
+ if(S.ed&&pt.size===1&&S.fmt!=='tr'&&(v==='2d'||v==='3d')){const p=fp(e);if(!p)return;
+  const full=S.fmt==='full';let best=null,bd=1.2;
+  const bdist=Math.hypot(p.x-ball.position.x,p.z-ball.position.z);if(bdist<1.4){best={k:'b'};bd=0}
+  [['o',our],['p',full?opp:[]]].forEach(a=>a[1].forEach((q,i)=>{const d=Math.hypot(p.x-q.x,p.z-q.z);if(d<bd){bd=d;best={k:a[0],i}}}));
+  dg=best}});
+cv.addEventListener('pointermove',e=>{
+ if(dg){const p=fp(e);if(!p)return;
+  if(dg.k==='b'){const y=F.b[1];F.b=[cl(p.x,12),y,cl(p.z,14),0];bf=bto=[F.b[0],y,F.b[2]];arc=0;bT=1}
+  else{const q=(dg.k==='o'?F.o:F.p)[dg.i],a=(dg.k==='o'?our:opp)[dg.i];q.x=a.x=cl(p.x,8);q.z=a.z=cl(p.z,14)}
+  return}
+ const o=pt.get(e.pointerId);if(!o||eff()!=='3d')return;
+ if(pt.size===1){th-=(e.clientX-o[0])*.008;ph_=Math.max(.15,Math.min(1.5,ph_-(e.clientY-o[1])*.006))}
+ else{const a=[...pt.values()],d0=Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]);pt.set(e.pointerId,[e.clientX,e.clientY]);const c=[...pt.values()],d1=Math.hypot(c[0][0]-c[1][0],c[0][1]-c[1][1]);rad=Math.max(6,Math.min(50,rad*d0/(d1||d0)));return}
+ pt.set(e.pointerId,[e.clientX,e.clientY])});
+cv.addEventListener('pointercancel',e=>{pt.delete(e.pointerId);dg=null});
+cv.addEventListener('pointerup',e=>{pt.delete(e.pointerId);
+ if(dg){dg=null;ui();return}
+ if(S.fmt!=='tr'||!Q||Q.done)return;
+ const p=fp(e);if(!p)return;
+ const d=Math.hypot(p.x-Q.x,p.z-Q.z);Q.done=1;nn++;if(d<2)ok++;
+ Q.msg=(d<2?'✅ Вірно! ':`❌ Промах на ${d.toFixed(1)} м. `)+`Рахунок ${ok}/${nn}`;ui()});
+cv.addEventListener('wheel',e=>{rad=Math.max(6,Math.min(50,rad+e.deltaY*.02));e.preventDefault()},{passive:false});
+new ResizeObserver(()=>R.setSize(cv.clientWidth,cv.clientHeight,false)).observe($('#stage'));
+
+let last=performance.now(),htxt='';
+function loop(now){
+ const dt=Math.min((now-last)/1000,.05);last=now;
+ const k=1-Math.exp(-5*dt*S.spd),v=eff(),full=S.fmt==='full',trn=S.fmt==='tr';
+ if(S.play&&!trn){acc+=dt*S.spd;if(acc>2.3){acc=0;go(1)}}
+ bT=Math.min(1,bT+dt*S.spd/.9);const e=bT*bT*(3-2*bT);
+ ball.position.set(bf[0]+(bto[0]-bf[0])*e,bf[1]+(bto[1]-bf[1])*e+arc*Math.sin(Math.PI*bT),bf[2]+(bto[2]-bf[2])*e);
+ const bx=ball.position.x,by=ball.position.y,bz=ball.position.z;
+ ball.visible=!trn;ring.visible=pole.visible=hl.visible=!trn;
+ ring.position.set(bx,.04,bz);pole.position.set(bx,by/2,bz);pole.scale.y=Math.max(by,.01);
+ hl.position.set(0,.015,bz>=0?4.5:-4.5);hl.material.color.set(bz>=0?0x3b82f6:0xef4444);
+ const out=Math.abs(bz)>9||Math.abs(bx)>4.5,net=Math.abs(bz)<.2;
+ const tx=`🏐 ${out?'поза майданчиком':net?'на сітці':bz>0?'наша половина · зона '+zn(bx,bz):'половина суперника · зона '+zn(-bx,-bz)} · ${Math.abs(bz).toFixed(1)} м від сітки · висота ${by.toFixed(1)} м`;
+ if(tx!==htxt){htxt=tx;$('#h2').textContent=tx}
+ if(S.tj&&bT<1){tp.push(bx,by,bz);while(tp.length>S.tl*3)tp.splice(0,3)}
+ tg.setAttribute('position',new THREE.Float32BufferAttribute(tp,3));tln.visible=!!S.tj&&tp.length>5&&!trn;
+ const flat=v==='2d';
+ [our,opp].forEach((arr,w)=>arr.forEach((p,i)=>{const t=(w?F.p:F.o)[i];if(!t)return;
+  if(!p.i){p.i=1;p.x=t.x;p.z=t.z}
+  if(!(dg&&dg.k===(w?'p':'o')&&dg.i===i)){p.x+=(t.x-p.x)*k;p.z+=(t.z-p.z)*k}
+  p.j+=(t.j-p.j)*k;p.a+=(t.a-p.a)*k;
+  p.g.position.set(p.x,p.j,p.z);p.g.scale.set(flat?1.5:1,1,flat?1.5:1);
+  p.hd.visible=!flat;p.arms.forEach(a=>{a.rotation.x=Math.PI*p.a;a.visible=!flat});
+  if(!w){const n=NM[i];if(p.nm!==n){p.nm=n;p.tm.color.set(col(n));p.sp.material.map=lab(n,col(n));p.sp.material.needsUpdate=true}
+   p.sp.visible=!!S.lab;p.g.visible=!((trn&&Q&&!Q.done&&i===Q.i)||(v==='p1'&&i===S.sel))}
+  else p.g.visible=full}));
+ zg.visible=!!S.zn;dgl.visible=!!S.dg;
+ for(let i=0;i<3;i++)dga.array.set([our[i].x,.06,our[i].z,our[i+3].x,.06,our[i+3].z],i*6);dga.needsUpdate=true;
+ CAM=camUpd(v,full);R.render(sc,CAM);requestAnimationFrame(loop)}
+R.setSize(cv.clientWidth,cv.clientHeight,false);
+F=build();ball.position.set(F.b[0],F.b[1],F.b[2]);bf=bto=F.b.slice(0,3);ui();requestAnimationFrame(loop);
+}
+window.THREE?main():document.querySelector('main').insertAdjacentHTML('beforeend','<p>Не вдалося завантажити 3D-рушій. Перевірте з’єднання й оновіть сторінку.</p>');
+</script></body></html>
